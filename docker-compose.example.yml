@@ -1,0 +1,96 @@
+version: '3.8'
+
+services:
+  # Gluetun VPN client
+  gluetun:
+    image: qmcgaw/gluetun:latest
+    container_name: gluetun
+    cap_add:
+      - NET_ADMIN
+    devices:
+      - /dev/net/tun:/dev/net/tun
+    ports:
+      # Gluetun control server
+      - "8000:8000"
+      # HTTP proxy
+      - "8888:8888"
+      # Shadowsocks
+      - "8388:8388"
+      # Monitor API
+      - "3010:3010"
+    environment:
+      # VPN Provider Configuration
+      - VPN_SERVICE_PROVIDER=mullvad
+      - VPN_TYPE=wireguard
+      - WIREGUARD_PRIVATE_KEY=your_private_key
+      - WIREGUARD_ADDRESSES=10.x.x.x/32
+      - SERVER_CITIES=Amsterdam
+      
+      # Gluetun Settings
+      - UPDATER_PERIOD=24h
+      - HEALTH_VPN_DURATION_INITIAL=30s
+      
+      # Optional: Port Forwarding
+      # - VPN_PORT_FORWARDING=on
+      # - VPN_PORT_FORWARDING_PROVIDER=protonvpn
+    volumes:
+      - ./gluetun:/gluetun
+    restart: unless-stopped
+
+  # Gluetun Monitor
+  gluetun-monitor:
+    image: ghcr.io/mlgruby/gluetun-monitor:latest
+    container_name: gluetun-monitor
+    # Share network with Gluetun to monitor the VPN connection
+    network_mode: "service:gluetun"
+    environment:
+      # Required: Your VPN provider's ASN(s)
+      # Find at https://ifconfig.co/json while connected to VPN
+      - VPN_ALLOWED_ASNS=AS212238,AS204770
+      
+      # Gluetun API (accessible via localhost when using network_mode)
+      - GLUETUN_API_URL=http://localhost:8000
+      
+      # Optional: ntfy notifications
+      - NTFY_URL=https://ntfy.sh/your-unique-vpn-topic
+      - NTFY_INTERVAL_HOURS=2
+      
+      # Optional: Check interval
+      - VPN_CHECK_INTERVAL_MINUTES=5
+      
+      # Optional: Logging
+      - RUST_LOG=info
+    depends_on:
+      - gluetun
+    restart: unless-stopped
+
+# Example: Multiple VPN Instances
+# Uncomment to run multiple VPN connections with separate monitors
+#
+#  gluetun-us:
+#    image: qmcgaw/gluetun:latest
+#    container_name: gluetun-us
+#    cap_add:
+#      - NET_ADMIN
+#    devices:
+#      - /dev/net/tun:/dev/net/tun
+#    ports:
+#      - "8001:8000"  # Different control port
+#      - "3011:3010"  # Different monitor port
+#    environment:
+#      - VPN_SERVICE_PROVIDER=mullvad
+#      - SERVER_COUNTRIES=United States
+#      # ... other VPN config
+#    restart: unless-stopped
+#
+#  gluetun-monitor-us:
+#    image: ghcr.io/yourusername/gluetun-monitor:latest
+#    container_name: gluetun-monitor-us
+#    network_mode: "service:gluetun-us"
+#    environment:
+#      - VPN_ALLOWED_ASNS=AS54321
+#      - GLUETUN_API_URL=http://localhost:8000
+#      - NTFY_URL=https://ntfy.sh/vpn-us-topic
+#    depends_on:
+#      - gluetun-us
+#    restart: unless-stopped
