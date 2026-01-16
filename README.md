@@ -18,8 +18,6 @@ A lightweight VPN health monitoring service written in Rust that integrates with
 ### Using Docker Compose (Recommended)
 
 ```yaml
-version: '3.8'
-
 services:
   gluetun:
     image: qmcgaw/gluetun
@@ -36,7 +34,7 @@ services:
     restart: unless-stopped
 
   gluetun-monitor:
-    image: ghcr.io/yourusername/gluetun-monitor:latest
+    image: ghcr.io/mlgruby/gluetun-monitor:latest
     container_name: gluetun-monitor
     network_mode: "service:gluetun"
     environment:
