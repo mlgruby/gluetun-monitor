@@ -1,6 +1,6 @@
 [package]
 name = "gluetun-monitor"
-version = "0.1.0"
+version = "0.1.1"
 edition = "2021"
 authors = ["Satya"]
 description = "VPN health monitoring service with Gluetun integration, ASN validation, and notifications"
@@ -16,13 +16,13 @@ path = "src/main.rs"
 
 [dependencies]
 # HTTP Server
-axum = "0.7"
+axum = "0.8"
 
 # Async Runtime
-tokio = { version = "1.0", features = ["full"] }
+tokio = { version = "1.49", features = ["full"] }
 
 # HTTP Client
-reqwest = { version = "0.11", default-features = false, features = ["json", "rustls-tls"] }
+reqwest = { version = "0.12", default-features = false, features = ["json", "rustls-tls"] }
 
 # Serialization
 serde = { version = "1.0", features = ["derive"] }
@@ -37,7 +37,7 @@ tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 
 [dev-dependencies]
 # Testing
-mockito = "1.6"
+mockito = "1.7"
 tokio-test = "0.4"
 
 [profile.release]
