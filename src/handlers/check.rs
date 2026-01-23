@@ -6,11 +6,45 @@
 
 use crate::{
     ip_lookup,
-    models::{AppState, CheckResponse},
+    models::{AppState, CheckResponse, LookupResult},
 };
 use axum::{extract::State, http::StatusCode, response::IntoResponse, Json};
 
-/// Handler for /check endpoint
+/// Error message when ASN validation is not configured
+const ERR_ASNS_NOT_CONFIGURED: &str = "VPN_ALLOWED_ASNS not set";
+
+/// Error message when connected ASN is not in allowed list
+const ERR_ASN_NOT_ALLOWED: &str = "ASN not allowed";
+
+/// Handler for `/check` health check endpoint
+///
+/// # Purpose
+/// Validates VPN connection is active and using an allowed ASN.
+/// Designed for monitoring tools like Uptime Kuma.
+///
+/// # Returns
+/// - `200 OK` with `{"ok": true}` if VPN is connected with allowed ASN
+/// - `503 Service Unavailable` with error details if:
+///   - IP lookup fails
+///   - ASN validation is not configured
+///   - Connected ASN is not in allowed list
+///
+/// # Response Format
+/// ```json
+/// {
+///   "ok": true/false,
+///   "reason": "Error message (only if ok=false)",
+///   "ip": "1.2.3.4",
+///   "asn": "AS12345",
+///   "country": "Netherlands"
+/// }
+/// ```
+///
+/// # HTTP Example
+/// ```text
+/// GET /check
+/// 200 OK {"ok": true, "ip": "1.2.3.4", "asn": "AS12345"}
+/// ```
 pub async fn check_handler(State(state): State<AppState>) -> impl IntoResponse {
     let info = ip_lookup::lookup(
         &state.client,
@@ -33,8 +67,10 @@ pub async fn check_handler(State(state): State<AppState>) -> impl IntoResponse {
 
     // Check if ASNs are configured
     if state.allowed_asns.is_empty() {
-        let mut err_info = info;
-        err_info.error = Some("VPN_ALLOWED_ASNS not set".to_string());
+        let err_info = LookupResult {
+            error: Some(ERR_ASNS_NOT_CONFIGURED.to_string()),
+            ..info
+        };
         return (
             StatusCode::SERVICE_UNAVAILABLE,
             Json(CheckResponse {
@@ -46,17 +82,15 @@ pub async fn check_handler(State(state): State<AppState>) -> impl IntoResponse {
     }
 
     // Check if ASN is allowed
-    if let Some(asn) = &info.asn {
-        if state.allowed_asns.contains(asn) {
-            return (
-                StatusCode::OK,
-                Json(CheckResponse {
-                    ok: true,
-                    reason: None,
-                    lookup: info,
-                }),
-            );
-        }
+    if info.is_asn_allowed(&state.allowed_asns) {
+        return (
+            StatusCode::OK,
+            Json(CheckResponse {
+                ok: true,
+                reason: None,
+                lookup: info,
+            }),
+        );
     }
 
     // ASN not allowed
@@ -64,7 +98,7 @@ pub async fn check_handler(State(state): State<AppState>) -> impl IntoResponse {
         StatusCode::SERVICE_UNAVAILABLE,
         Json(CheckResponse {
             ok: false,
-            reason: Some("ASN not allowed".to_string()),
+            reason: Some(ERR_ASN_NOT_ALLOWED.to_string()),
             lookup: info,
         }),
     )
