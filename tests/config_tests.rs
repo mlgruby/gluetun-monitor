@@ -7,15 +7,17 @@ use std::env;
 
 #[test]
 fn test_config_from_env_with_defaults() {
-    // Clear environment
+    // Given: No environment variables are set
     env::remove_var("VPN_ALLOWED_ASNS");
     env::remove_var("NTFY_URL");
     env::remove_var("GLUETUN_API_URL");
     env::remove_var("NTFY_INTERVAL_HOURS");
     env::remove_var("VPN_CHECK_INTERVAL_MINUTES");
 
+    // When: Loading config from environment
     let config = Config::from_env();
 
+    // Then: Config should use default values
     assert!(config.allowed_asns.is_empty());
     assert!(config.ntfy_url.is_none());
     assert!(config.gluetun_url.is_none());
@@ -25,7 +27,7 @@ fn test_config_from_env_with_defaults() {
 
 #[test]
 fn test_config_from_env_with_values() {
-    // Clear potentially conflicting env vars first
+    // Given: Environment variables with valid configuration values
     env::remove_var("VPN_ALLOWED_ASNS");
     env::remove_var("NTFY_URL");
     env::remove_var("GLUETUN_API_URL");
@@ -40,8 +42,10 @@ fn test_config_from_env_with_values() {
     env::set_var("NTFY_INTERVAL_HOURS", "3");
     env::set_var("VPN_CHECK_INTERVAL_MINUTES", "10");
 
+    // When: Loading config from environment
     let config = Config::from_env();
 
+    // Then: Config should parse all values correctly
     assert_eq!(config.allowed_asns.len(), 3);
     assert!(config.allowed_asns.contains("AS12345"));
     assert!(config.allowed_asns.contains("AS67890"));
@@ -66,10 +70,13 @@ fn test_config_from_env_with_values() {
 
 #[test]
 fn test_config_asn_parsing() {
+    // Given: ASN list with extra whitespace and empty entries
     env::set_var("VPN_ALLOWED_ASNS", "  AS12345  ,  , AS67890 ,  ");
 
+    // When: Loading config from environment
     let config = Config::from_env();
 
+    // Then: Should trim whitespace and ignore empty entries
     assert_eq!(config.allowed_asns.len(), 2);
     assert!(config.allowed_asns.contains("AS12345"));
     assert!(config.allowed_asns.contains("AS67890"));
@@ -79,12 +86,14 @@ fn test_config_asn_parsing() {
 
 #[test]
 fn test_config_minimum_intervals() {
+    // Given: Interval values set to 0 (below minimum)
     env::set_var("NTFY_INTERVAL_HOURS", "0");
     env::set_var("VPN_CHECK_INTERVAL_MINUTES", "0");
 
+    // When: Loading config from environment
     let config = Config::from_env();
 
-    // Should enforce minimum of 1
+    // Then: Should enforce minimum value of 1
     assert_eq!(config.notification_interval_hours, 1);
     assert_eq!(config.check_interval_minutes, 1);
 
@@ -94,12 +103,14 @@ fn test_config_minimum_intervals() {
 
 #[test]
 fn test_config_invalid_interval_values() {
+    // Given: Invalid non-numeric interval values
     env::set_var("NTFY_INTERVAL_HOURS", "invalid");
     env::set_var("VPN_CHECK_INTERVAL_MINUTES", "not-a-number");
 
+    // When: Loading config from environment
     let config = Config::from_env();
 
-    // Should fall back to defaults
+    // Then: Should fall back to default values
     assert_eq!(config.notification_interval_hours, 2);
     assert_eq!(config.check_interval_minutes, 5);
 

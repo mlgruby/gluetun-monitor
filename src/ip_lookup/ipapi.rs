@@ -6,6 +6,7 @@
 use crate::models::LookupResult;
 use reqwest::Client;
 use serde::Deserialize;
+use tracing::warn;
 
 #[derive(Deserialize)]
 struct IpApiResponse {
@@ -17,10 +18,47 @@ struct IpApiResponse {
 }
 
 /// Fetch IP information from ipapi.co
+///
+/// # Parameters
+/// - `client`: HTTP client for making requests
+///
+/// # Returns
+/// - `Some(LookupResult)` with IP, ASN, org, and country on success
+/// - `None` if request fails or response cannot be parsed
+///
+/// # Behavior
+/// - Uses ipapi.co's JSON API endpoint
+/// - Handles ASN as either string or number in JSON response
+/// - Uppercases ASN code
+/// - Prefers `org` field over `organization` field
+/// - Logs warnings on failure
+///
+/// # Note
+/// Rate limited to ~1000 requests/day on free tier
+///
+/// # Example
+/// ```text
+/// let result = fetch_ipapi(&client).await;
+/// if let Some(info) = result {
+///     println!("IP: {}, ASN: {}", info.ip?, info.asn?);
+/// }
+/// ```
 pub async fn fetch_ipapi(client: &Client) -> Option<LookupResult> {
-    let resp = client.get("https://ipapi.co/json/").send().await.ok()?;
+    let resp = match client.get("https://ipapi.co/json/").send().await {
+        Ok(r) => r,
+        Err(e) => {
+            warn!("ipapi.co API request failed: {}", e);
+            return None;
+        }
+    };
 
-    let data: IpApiResponse = resp.json().await.ok()?;
+    let data: IpApiResponse = match resp.json().await {
+        Ok(d) => d,
+        Err(e) => {
+            warn!("Failed to parse ipapi.co response: {}", e);
+            return None;
+        }
+    };
 
     let ip = data.ip?;
     let asn_val = data.asn?;
