@@ -21,7 +21,7 @@ use tokio::time::Duration;
 use tracing::info;
 
 #[tokio::main]
-async fn main() {
+async fn main() -> Result<(), Box<dyn std::error::Error>> {
     // Initialize tracing
     tracing_subscriber::fmt()
         .with_env_filter(
@@ -45,11 +45,16 @@ async fn main() {
     let client = reqwest::Client::builder()
         .timeout(Duration::from_secs(30))
         .build()
-        .expect("Failed to create HTTP client");
+        .map_err(|e| format!("Failed to create HTTP client: {}", e))?;
+
+    // Pre-sort allowed ASNs for efficient status endpoint responses
+    let mut allowed_asns_sorted: Vec<String> = config.allowed_asns.iter().cloned().collect();
+    allowed_asns_sorted.sort();
 
     // Create application state
     let state = AppState {
         allowed_asns: Arc::new(config.allowed_asns),
+        allowed_asns_sorted: Arc::new(allowed_asns_sorted),
         client,
         ntfy_url: config.ntfy_url,
         gluetun_url: config.gluetun_url,
@@ -79,9 +84,13 @@ async fn main() {
     // Start server
     let listener = tokio::net::TcpListener::bind("0.0.0.0:3010")
         .await
-        .expect("Failed to bind to port 3010");
+        .map_err(|e| format!("Failed to bind to port 3010: {}", e))?;
 
-    info!("Listening on {}", listener.local_addr().unwrap());
+    info!("Listening on {}", listener.local_addr()?);
 
-    axum::serve(listener, app).await.expect("Server failed");
+    axum::serve(listener, app)
+        .await
+        .map_err(|e| format!("Server failed: {}", e))?;
+
+    Ok(())
 }
