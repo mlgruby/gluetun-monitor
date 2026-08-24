@@ -9,7 +9,7 @@ env:
   RUST_BACKTRACE: 1
 
 jobs:
-  # Quick checks - always run on all PRs
+  # All verification and compilation jobs run in parallel for maximum speed
   check:
     name: Check
     runs-on: ubuntu-latest
@@ -43,7 +43,6 @@ jobs:
       - name: Run clippy
         run: cargo clippy --all-targets --all-features -- -D warnings
 
-  # Heavy jobs - only run on PRs to develop (feature → develop)
   test:
     name: Test Suite
     runs-on: ubuntu-latest
@@ -70,7 +69,6 @@ jobs:
     name: Build Release
     runs-on: ubuntu-latest
     if: github.base_ref == 'develop'
-    needs: [check, test, fmt, clippy, audit]
     steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable

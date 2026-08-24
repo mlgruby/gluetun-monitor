@@ -2,19 +2,19 @@
 # Optimized for minimal size and security
 
 # Stage 1: Build the binary
-FROM rust:1.83-alpine AS builder
+FROM rust:alpine AS builder
 
 WORKDIR /app
 
 # Install build dependencies
-RUN apk add --no-cache \
-    musl-dev
+RUN apk add --no-cache musl-dev
 
 # Copy manifests first for better layer caching
 COPY Cargo.toml Cargo.lock ./
 
-# Create dummy main to cache dependencies
+# Create dummy main and lib to cache dependencies
 RUN mkdir src && \
+    echo "pub fn dummy() {}" > src/lib.rs && \
     echo "fn main() {}" > src/main.rs && \
     cargo build --release && \
     rm -rf src
@@ -24,12 +24,12 @@ COPY src ./src
 COPY tests ./tests
 
 # Build release binary with optimizations and strip symbols
-RUN touch src/main.rs && \
+RUN touch src/main.rs src/lib.rs && \
     cargo build --release && \
     strip /app/target/release/gluetun-monitor
 
 # Stage 2: Runtime image (Alpine for minimal size)
-FROM alpine:3.19
+FROM alpine:3.21
 
 # Install only runtime dependencies
 RUN apk add --no-cache \
