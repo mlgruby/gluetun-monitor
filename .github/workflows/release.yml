@@ -44,14 +44,12 @@ jobs:
         with:
           images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
           tags: |
-            type=raw,value=${{ steps.version.outputs.version }}
-            type=raw,value=${{ steps.version.outputs.raw_version }}
+            type=raw,value=latest,enable=${{ github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/tags/v') }}
             type=ref,event=branch
-            type=raw,value=latest
             type=semver,pattern={{version}}
             type=semver,pattern={{major}}.{{minor}}
             type=semver,pattern={{major}}
-            type=sha,prefix={{branch}}-
+            type=sha,prefix=sha-
       
       - name: Build and push Docker image
         uses: docker/build-push-action@v5
@@ -89,25 +87,6 @@ jobs:
             ### Docker Image
             ```bash
             docker pull ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ steps.version.outputs.version }}
-            ```
-            
-            ### Installation
-            
-            **Using Docker:**
-            ```bash
-            docker run -d \
-              --name gluetun-monitor \
-              --network container:gluetun \
-              -e VPN_ALLOWED_ASNS=AS12345,AS67890 \
-              -e GLUETUN_API_URL=http://localhost:8000 \
-              -e NTFY_URL=https://ntfy.sh/your-topic \
-              ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ steps.version.outputs.version }}
-            ```
-            
-            **Using Binary:**
-            ```bash
-            tar -xzf gluetun-monitor-linux-amd64.tar.gz
-            ./gluetun-monitor
             ```
             
             ### What's Changed
