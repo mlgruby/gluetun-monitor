@@ -1,12 +1,6 @@
 //! Data Models
 //!
 //! Defines the core data structures used throughout the application.
-//!
-//! ## Key Types
-//! - `LookupResult`: IP lookup response with ASN, location, and port forwarding info
-//! - `StatusResponse`: Response for `/status` endpoint (informational)
-//! - `CheckResponse`: Response for `/check` endpoint (health check)
-//! - `AppState`: Shared application state passed to all handlers
 
 use serde::{Deserialize, Serialize};
 use std::{collections::HashSet, sync::Arc};
@@ -33,57 +27,47 @@ pub struct LookupResult {
 }
 
 impl LookupResult {
-    /// Check if the ASN is in the allowed set
-    ///
-    /// # Parameters
-    /// - `allowed_asns`: Set of permitted ASN codes (e.g., {"AS12345", "AS67890"})
-    ///
-    /// # Returns
-    /// - `true` if ASN is present and in the allowed set
-    /// - `false` if ASN is None or not in the allowed set
-    ///
-    /// # Example
-    /// ```rust,no_run
-    /// # use std::collections::HashSet;
-    /// # use gluetun_monitor::models::LookupResult;
-    /// let mut allowed = HashSet::new();
-    /// allowed.insert("AS12345".to_string());
-    ///
-    /// let result = LookupResult {
-    ///     ip: None, asn: Some("AS12345".into()), org: None,
-    ///     country: None, city: None, region: None,
-    ///     port_forwarded: None, error: None
-    /// };
-    /// assert!(result.is_asn_allowed(&allowed));
-    /// ```
-    pub fn is_asn_allowed(&self, allowed_asns: &HashSet<String>) -> bool {
-        self.asn
-            .as_ref()
-            .map(|asn| allowed_asns.contains(asn))
-            .unwrap_or(false)
+    /// Check if the connection matches permitted ASNs, allowed provider keywords, or unrestricted mode
+    pub fn is_asn_allowed(
+        &self,
+        allowed_asns: &HashSet<String>,
+        allowed_providers: &HashSet<String>,
+    ) -> bool {
+        if let Some(asn) = self.asn.as_ref() {
+            if allowed_asns.contains(asn) {
+                return true;
+            }
+        }
+
+        if let Some(org) = self.org.as_ref() {
+            let upper_org = org.to_uppercase();
+            for provider in allowed_providers {
+                if upper_org.contains(provider) {
+                    return true;
+                }
+            }
+        }
+
+        if allowed_asns.is_empty() && allowed_providers.is_empty() {
+            return true;
+        }
+
+        if allowed_asns.is_empty() {
+            return true;
+        }
+
+        false
     }
 
-    /// Format location as "City, Country" or fallback to just country or region
-    ///
-    /// # Returns
-    /// Formatted location string based on available data:
-    /// - `"City, Country"` if both present
-    /// - `"Country"` if only country present
-    /// - `"City"` if only city present
-    /// - `"Region"` if only region present
-    /// - `"Unknown"` if no location data
-    ///
-    /// # Example
-    /// ```rust,no_run
-    /// # use gluetun_monitor::models::LookupResult;
-    /// let result = LookupResult {
-    ///     ip: None, asn: None, org: None,
-    ///     city: Some("Amsterdam".into()),
-    ///     country: Some("Netherlands".into()),
-    ///     region: None, port_forwarded: None, error: None
-    /// };
-    /// assert_eq!(result.format_location(), "Amsterdam, Netherlands");
-    /// ```
+    /// Check if current IP leaked and matches Home WAN IP
+    pub fn is_leak(&self, home_ip: Option<&str>) -> bool {
+        match (self.ip.as_deref(), home_ip) {
+            (Some(curr_ip), Some(h_ip)) if !h_ip.is_empty() => curr_ip.trim() == h_ip.trim(),
+            _ => false,
+        }
+    }
+
+    /// Format location as "City, Country" or fallback
     pub fn format_location(&self) -> String {
         match (&self.city, &self.country) {
             (Some(city), Some(country)) => format!("{}, {}", city, country),
@@ -104,7 +88,6 @@ pub struct StatusResponse {
     pub configured: bool,
 }
 
-// Custom serializer for Arc<Vec<String>> to serialize as array
 fn serialize_arc_vec<S>(arc: &Arc<Vec<String>>, serializer: S) -> Result<S::Ok, S::Error>
 where
     S: serde::Serializer,
@@ -127,6 +110,8 @@ pub struct CheckResponse {
 pub struct AppState {
     pub allowed_asns: Arc<HashSet<String>>,
     pub allowed_asns_sorted: Arc<Vec<String>>,
+    pub allowed_providers: Arc<HashSet<String>>,
+    pub home_ip: Option<String>,
     pub client: reqwest::Client,
     pub ntfy_url: Option<String>,
     pub gluetun_url: Option<String>,

@@ -1,6 +1,6 @@
 [package]
 name = "gluetun-monitor"
-version = "0.1.3"
+version = "0.2.0"
 edition = "2021"
 authors = ["Satya"]
 description = "VPN health monitoring service with Gluetun integration, ASN validation, and notifications"
