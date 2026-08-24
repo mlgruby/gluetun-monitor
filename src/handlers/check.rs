@@ -1,50 +1,17 @@
 //! Health Check Handler
 //!
 //! Provides the `/check` endpoint for health monitoring.
-//! Returns 200 OK if VPN is connected with allowed ASN, 503 otherwise.
-//! Designed for Uptime Kuma and other monitoring tools.
+//! Returns 200 OK if VPN is connected and safe, 503 otherwise.
 
 use crate::{
     ip_lookup,
-    models::{AppState, CheckResponse, LookupResult},
+    models::{AppState, CheckResponse},
 };
 use axum::{extract::State, http::StatusCode, response::IntoResponse, Json};
 
-/// Error message when ASN validation is not configured
-const ERR_ASNS_NOT_CONFIGURED: &str = "VPN_ALLOWED_ASNS not set";
+const ERR_VPN_LEAK: &str = "VPN leak detected: Public IP matches Home WAN IP";
+const ERR_ASN_NOT_ALLOWED: &str = "ASN/Provider not allowed";
 
-/// Error message when connected ASN is not in allowed list
-const ERR_ASN_NOT_ALLOWED: &str = "ASN not allowed";
-
-/// Handler for `/check` health check endpoint
-///
-/// # Purpose
-/// Validates VPN connection is active and using an allowed ASN.
-/// Designed for monitoring tools like Uptime Kuma.
-///
-/// # Returns
-/// - `200 OK` with `{"ok": true}` if VPN is connected with allowed ASN
-/// - `503 Service Unavailable` with error details if:
-///   - IP lookup fails
-///   - ASN validation is not configured
-///   - Connected ASN is not in allowed list
-///
-/// # Response Format
-/// ```json
-/// {
-///   "ok": true/false,
-///   "reason": "Error message (only if ok=false)",
-///   "ip": "1.2.3.4",
-///   "asn": "AS12345",
-///   "country": "Netherlands"
-/// }
-/// ```
-///
-/// # HTTP Example
-/// ```text
-/// GET /check
-/// 200 OK {"ok": true, "ip": "1.2.3.4", "asn": "AS12345"}
-/// ```
 pub async fn check_handler(State(state): State<AppState>) -> impl IntoResponse {
     let info = ip_lookup::lookup(
         &state.client,
@@ -59,30 +26,26 @@ pub async fn check_handler(State(state): State<AppState>) -> impl IntoResponse {
             StatusCode::SERVICE_UNAVAILABLE,
             Json(CheckResponse {
                 ok: false,
-                reason: None, // Error is in the flattened lookup
+                reason: None,
                 lookup: info,
             }),
         );
     }
 
-    // Check if ASNs are configured
-    if state.allowed_asns.is_empty() {
-        let err_info = LookupResult {
-            error: Some(ERR_ASNS_NOT_CONFIGURED.to_string()),
-            ..info
-        };
+    // Check for Home IP Leak
+    if info.is_leak(state.home_ip.as_deref()) {
         return (
             StatusCode::SERVICE_UNAVAILABLE,
             Json(CheckResponse {
                 ok: false,
-                reason: None,
-                lookup: err_info,
+                reason: Some(ERR_VPN_LEAK.to_string()),
+                lookup: info,
             }),
         );
     }
 
-    // Check if ASN is allowed
-    if info.is_asn_allowed(&state.allowed_asns) {
+    // Check if ASN or Provider is allowed
+    if info.is_asn_allowed(&state.allowed_asns, &state.allowed_providers) {
         return (
             StatusCode::OK,
             Json(CheckResponse {
@@ -93,7 +56,7 @@ pub async fn check_handler(State(state): State<AppState>) -> impl IntoResponse {
         );
     }
 
-    // ASN not allowed
+    // ASN / Provider not allowed
     (
         StatusCode::SERVICE_UNAVAILABLE,
         Json(CheckResponse {

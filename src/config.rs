@@ -1,9 +1,11 @@
-// Configuration Module
+//! Configuration Module
 //!
 //! Handles loading and parsing of application configuration from environment variables.
 //!
 //! ## Environment Variables
-//! - `VPN_ALLOWED_ASNS`: Comma-separated list of allowed ASNs (required)
+//! - `VPN_ALLOWED_ASNS`: Comma-separated list of allowed ASNs (optional)
+//! - `VPN_ALLOWED_PROVIDERS`: Comma-separated list of allowed provider keywords (optional)
+//! - `HOME_IP`: Home WAN IP to strictly check against leaks (optional)
 //! - `GLUETUN_API_URL`: Gluetun API endpoint (optional)
 //! - `GLUETUN_API_KEY`: Gluetun API key (optional)
 //! - `NTFY_URL`: ntfy.sh notification URL (optional)
@@ -15,6 +17,8 @@ use std::{collections::HashSet, env};
 /// Application configuration loaded from environment variables
 pub struct Config {
     pub allowed_asns: HashSet<String>,
+    pub allowed_providers: HashSet<String>,
+    pub home_ip: Option<String>,
     pub ntfy_url: Option<String>,
     pub gluetun_url: Option<String>,
     pub gluetun_api_key: Option<String>,
@@ -32,6 +36,28 @@ impl Config {
             .filter(|s| !s.is_empty())
             .collect();
 
+        let providers_env = env::var("VPN_ALLOWED_PROVIDERS").unwrap_or_default();
+        let mut allowed_providers: HashSet<String> = providers_env
+            .split(',')
+            .map(|s| s.trim().to_uppercase())
+            .filter(|s| !s.is_empty())
+            .collect();
+
+        // Default to common VPN providers if no specific providers were supplied
+        if allowed_providers.is_empty() && allowed_asns.is_empty() {
+            allowed_providers.insert("PROTON".to_string());
+            allowed_providers.insert("MULLVAD".to_string());
+            allowed_providers.insert("M247".to_string());
+            allowed_providers.insert("DATACLUB".to_string());
+            allowed_providers.insert("DATACENTER".to_string());
+            allowed_providers.insert("HOSTING".to_string());
+        }
+
+        let home_ip = env::var("HOME_IP")
+            .ok()
+            .map(|s| s.trim().to_string())
+            .filter(|s| !s.is_empty());
+
         let ntfy_url = env::var("NTFY_URL").ok();
         let gluetun_url = env::var("GLUETUN_API_URL").ok();
         let gluetun_api_key = env::var("GLUETUN_API_KEY").ok();
@@ -41,17 +67,19 @@ impl Config {
             .ok()
             .and_then(|s| s.parse::<u64>().ok())
             .unwrap_or(2)
-            .max(1); // Ensure at least 1 hour
+            .max(1);
 
         // Parse check interval, default to 5 minutes, minimum 1 minute
         let check_interval_minutes = env::var("VPN_CHECK_INTERVAL_MINUTES")
             .ok()
             .and_then(|s| s.parse::<u64>().ok())
             .unwrap_or(5)
-            .max(1); // Ensure at least 1 minute
+            .max(1);
 
         Self {
             allowed_asns,
+            allowed_providers,
+            home_ip,
             ntfy_url,
             gluetun_url,
             gluetun_api_key,

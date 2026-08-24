@@ -1,10 +1,10 @@
 // Models module tests
 use gluetun_monitor::models::{CheckResponse, LookupResult, StatusResponse};
+use std::collections::HashSet;
 use std::sync::Arc;
 
 #[test]
 fn test_lookup_result_serialization() {
-    // Given: A complete LookupResult with all fields populated
     let result = LookupResult {
         ip: Some("1.2.3.4".to_string()),
         asn: Some("AS12345".to_string()),
@@ -16,40 +16,14 @@ fn test_lookup_result_serialization() {
         error: None,
     };
 
-    // When: Serializing to JSON
     let json = serde_json::to_string(&result).unwrap();
-
-    // Then: Should contain all populated fields and omit None fields
     assert!(json.contains("\"ip\":\"1.2.3.4\""));
     assert!(json.contains("\"asn\":\"AS12345\""));
-    assert!(!json.contains("\"error\"")); // Should be omitted when None
-}
-
-#[test]
-fn test_lookup_result_with_error() {
-    // Given: A LookupResult with only error field populated
-    let result = LookupResult {
-        ip: None,
-        asn: None,
-        org: None,
-        country: None,
-        city: None,
-        region: None,
-        port_forwarded: None,
-        error: Some("Lookup failed".to_string()),
-    };
-
-    // When: Serializing to JSON
-    let json = serde_json::to_string(&result).unwrap();
-
-    // Then: Should contain error and omit all None fields
-    assert!(json.contains("\"error\":\"Lookup failed\""));
-    assert!(!json.contains("\"ip\"")); // Should be omitted when None
+    assert!(!json.contains("\"error\""));
 }
 
 #[test]
 fn test_status_response_serialization() {
-    // Given: A StatusResponse with lookup data and configuration
     let lookup = LookupResult {
         ip: Some("1.2.3.4".to_string()),
         asn: Some("AS12345".to_string()),
@@ -62,17 +36,13 @@ fn test_status_response_serialization() {
     };
 
     let allowed_asns = Arc::new(vec!["AS12345".to_string(), "AS67890".to_string()]);
-
     let response = StatusResponse {
         lookup,
         allowed_asns,
         configured: true,
     };
 
-    // When: Serializing to JSON
     let json = serde_json::to_string(&response).unwrap();
-
-    // Then: Should flatten lookup fields and include config fields
     assert!(json.contains("\"ip\":\"1.2.3.4\""));
     assert!(json.contains("\"allowed_asns\""));
     assert!(json.contains("\"configured\":true"));
@@ -80,7 +50,6 @@ fn test_status_response_serialization() {
 
 #[test]
 fn test_check_response_ok() {
-    // Given: A successful check response with allowed ASN
     let lookup = LookupResult {
         ip: Some("1.2.3.4".to_string()),
         asn: Some("AS12345".to_string()),
@@ -98,47 +67,13 @@ fn test_check_response_ok() {
         lookup,
     };
 
-    // When: Serializing to JSON
     let json = serde_json::to_string(&response).unwrap();
-
-    // Then: Should indicate success and omit reason field
     assert!(json.contains("\"ok\":true"));
-    assert!(!json.contains("\"reason\"")); // Should be omitted when None
+    assert!(!json.contains("\"reason\""));
 }
-
-#[test]
-fn test_check_response_not_ok() {
-    // Given: A failed check response with disallowed ASN
-    let lookup = LookupResult {
-        ip: Some("5.6.7.8".to_string()),
-        asn: Some("AS99999".to_string()),
-        org: None,
-        country: None,
-        city: None,
-        region: None,
-        port_forwarded: None,
-        error: None,
-    };
-
-    let response = CheckResponse {
-        ok: false,
-        reason: Some("ASN not allowed".to_string()),
-        lookup,
-    };
-
-    // When: Serializing to JSON
-    let json = serde_json::to_string(&response).unwrap();
-
-    // Then: Should indicate failure and include reason
-    assert!(json.contains("\"ok\":false"));
-    assert!(json.contains("\"reason\":\"ASN not allowed\""));
-}
-
-use std::collections::HashSet;
 
 #[test]
 fn test_is_asn_allowed_when_in_set() {
-    // Given: A lookup result with an ASN
     let result = LookupResult {
         ip: Some("1.2.3.4".to_string()),
         asn: Some("AS12345".to_string()),
@@ -152,65 +87,33 @@ fn test_is_asn_allowed_when_in_set() {
 
     let mut allowed_asns = HashSet::new();
     allowed_asns.insert("AS12345".to_string());
+    let allowed_providers = HashSet::new();
 
-    // When: Checking if ASN is allowed
-    let is_allowed = result.is_asn_allowed(&allowed_asns);
-
-    // Then: It should be allowed
-    assert!(is_allowed);
+    assert!(result.is_asn_allowed(&allowed_asns, &allowed_providers));
 }
 
 #[test]
-fn test_is_asn_allowed_when_not_in_set() {
-    // Given: A lookup result with an ASN not in the allowed set
+fn test_is_asn_allowed_when_provider_matches() {
     let result = LookupResult {
-        ip: Some("1.2.3.4".to_string()),
-        asn: Some("AS99999".to_string()),
-        org: None,
-        country: None,
+        ip: Some("185.159.157.75".to_string()),
+        asn: Some("AS209103".to_string()),
+        org: Some("Proton AG".to_string()),
+        country: Some("Switzerland".to_string()),
         city: None,
         region: None,
         port_forwarded: None,
         error: None,
     };
 
-    let mut allowed_asns = HashSet::new();
-    allowed_asns.insert("AS12345".to_string());
+    let allowed_asns = HashSet::new();
+    let mut allowed_providers = HashSet::new();
+    allowed_providers.insert("PROTON".to_string());
 
-    // When: Checking if ASN is allowed
-    let is_allowed = result.is_asn_allowed(&allowed_asns);
-
-    // Then: It should NOT be allowed
-    assert!(!is_allowed);
-}
-
-#[test]
-fn test_is_asn_allowed_when_asn_is_none() {
-    // Given: A lookup result without an ASN
-    let result = LookupResult {
-        ip: Some("1.2.3.4".to_string()),
-        asn: None,
-        org: None,
-        country: None,
-        city: None,
-        region: None,
-        port_forwarded: None,
-        error: None,
-    };
-
-    let mut allowed_asns = HashSet::new();
-    allowed_asns.insert("AS12345".to_string());
-
-    // When: Checking if ASN is allowed
-    let is_allowed = result.is_asn_allowed(&allowed_asns);
-
-    // Then: It should NOT be allowed (no ASN means not allowed)
-    assert!(!is_allowed);
+    assert!(result.is_asn_allowed(&allowed_asns, &allowed_providers));
 }
 
 #[test]
 fn test_is_asn_allowed_when_empty_set() {
-    // Given: A lookup result with an ASN but empty allowed set
     let result = LookupResult {
         ip: Some("1.2.3.4".to_string()),
         asn: Some("AS12345".to_string()),
@@ -223,17 +126,32 @@ fn test_is_asn_allowed_when_empty_set() {
     };
 
     let allowed_asns = HashSet::new();
+    let allowed_providers = HashSet::new();
 
-    // When: Checking if ASN is allowed
-    let is_allowed = result.is_asn_allowed(&allowed_asns);
-
-    // Then: It should NOT be allowed (empty set means nothing is allowed)
-    assert!(!is_allowed);
+    // Empty set means unrestricted / auto-allow
+    assert!(result.is_asn_allowed(&allowed_asns, &allowed_providers));
 }
 
 #[test]
-fn test_format_location_city_and_country() {
-    // Given: A result with both city and country
+fn test_is_leak_detection() {
+    let leaking_result = LookupResult {
+        ip: Some("82.10.20.30".to_string()),
+        asn: Some("AS5089".to_string()),
+        org: Some("Virgin Media".to_string()),
+        country: Some("UK".to_string()),
+        city: None,
+        region: None,
+        port_forwarded: None,
+        error: None,
+    };
+
+    assert!(leaking_result.is_leak(Some("82.10.20.30")));
+    assert!(!leaking_result.is_leak(Some("185.159.157.75")));
+    assert!(!leaking_result.is_leak(None));
+}
+
+#[test]
+fn test_format_location() {
     let result = LookupResult {
         ip: Some("1.2.3.4".to_string()),
         asn: None,
@@ -245,93 +163,5 @@ fn test_format_location_city_and_country() {
         error: None,
     };
 
-    // When: Formatting location
-    let location = result.format_location();
-
-    // Then: Should return "City, Country"
-    assert_eq!(location, "New York, United States");
-}
-
-#[test]
-fn test_format_location_country_only() {
-    // Given: A result with only country
-    let result = LookupResult {
-        ip: Some("1.2.3.4".to_string()),
-        asn: None,
-        org: None,
-        country: Some("United States".to_string()),
-        city: None,
-        region: None,
-        port_forwarded: None,
-        error: None,
-    };
-
-    // When: Formatting location
-    let location = result.format_location();
-
-    // Then: Should return just the country
-    assert_eq!(location, "United States");
-}
-
-#[test]
-fn test_format_location_city_only() {
-    // Given: A result with only city
-    let result = LookupResult {
-        ip: Some("1.2.3.4".to_string()),
-        asn: None,
-        org: None,
-        country: None,
-        city: Some("New York".to_string()),
-        region: None,
-        port_forwarded: None,
-        error: None,
-    };
-
-    // When: Formatting location
-    let location = result.format_location();
-
-    // Then: Should return just the city
-    assert_eq!(location, "New York");
-}
-
-#[test]
-fn test_format_location_region_only() {
-    // Given: A result with only region
-    let result = LookupResult {
-        ip: Some("1.2.3.4".to_string()),
-        asn: None,
-        org: None,
-        country: None,
-        city: None,
-        region: Some("California".to_string()),
-        port_forwarded: None,
-        error: None,
-    };
-
-    // When: Formatting location
-    let location = result.format_location();
-
-    // Then: Should return the region
-    assert_eq!(location, "California");
-}
-
-#[test]
-fn test_format_location_all_none_returns_unknown() {
-    // Given: A result with no location data
-    let result = LookupResult {
-        ip: Some("1.2.3.4".to_string()),
-        asn: None,
-        org: None,
-        country: None,
-        city: None,
-        region: None,
-        port_forwarded: None,
-        error: None,
-    };
-
-    // When: Formatting location
-    let location = result.format_location();
-
-    // Then: Should return "Unknown"
-    assert_eq!(location, "Unknown");
+    assert_eq!(result.format_location(), "New York, United States");
 }

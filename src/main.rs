@@ -1,16 +1,4 @@
 //! # Gluetun Monitor - Main Entry Point
-//!
-//! This is the main entry point for the VPN health monitoring service.
-//! It initializes the HTTP server, spawns background monitoring tasks,
-//! and sets up the API endpoints for health checking and status reporting.
-//!
-//! ## Responsibilities
-//! - Initialize tracing/logging
-//! - Load configuration from environment variables
-//! - Create HTTP client and application state
-//! - Spawn periodic notification task
-//! - Spawn VPN change detection task
-//! - Start Axum HTTP server on port 3010
 
 use gluetun_monitor::{config, handlers, models, monitoring};
 
@@ -55,6 +43,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let state = AppState {
         allowed_asns: Arc::new(config.allowed_asns),
         allowed_asns_sorted: Arc::new(allowed_asns_sorted),
+        allowed_providers: Arc::new(config.allowed_providers),
+        home_ip: config.home_ip,
         client,
         ntfy_url: config.ntfy_url,
         gluetun_url: config.gluetun_url,
